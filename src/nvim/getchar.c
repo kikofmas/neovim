@@ -2388,7 +2388,7 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
     // Write chars to script file(s).
     // Note: :lmap mappings are written *after* being applied. #5658
     if (keylen > typebuf.tb_maplen && (mp->m_mode & MODE_LANGMAP) == 0) {
-      gotchars(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_maplen,
+      gotchars(mp->m_keys + typebuf.tb_maplen,
                (size_t)(keylen - typebuf.tb_maplen));
     }
 
