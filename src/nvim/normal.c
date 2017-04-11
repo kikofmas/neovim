@@ -730,7 +730,6 @@ static void normal_get_additional_char(NormalState *s)
     // For 'g' get the next character now, so that we can check for
     // "gr", "g'" and "g`".
     s->ca.nchar = plain_vgetc();
-    LANGMAP_ADJUST(s->ca.nchar, true);
     s->need_flushbuf |= add_to_showcmd(s->ca.nchar);
     if (s->ca.nchar == 'r' || s->ca.nchar == '\'' || s->ca.nchar == '`'
         || s->ca.nchar == Ctrl_BSL) {
@@ -795,8 +794,6 @@ static void normal_get_additional_char(NormalState *s)
         }
       }
 
-      // adjust chars > 127, except after "tTfFr" commands
-      LANGMAP_ADJUST(*cp, !lang);
     }
 
     // When the next character is CTRL-\ a following CTRL-N means the
@@ -953,7 +950,6 @@ static bool normal_get_command_count(NormalState *s)
     no_mapping++;
     allow_keys++;                        // no mapping for nchar, but keys
     s->c = plain_vgetc();                // get next character
-    LANGMAP_ADJUST(s->c, true);
     no_mapping--;
     allow_keys--;
     s->need_flushbuf |= add_to_showcmd(s->c);
@@ -1080,8 +1076,6 @@ static int normal_execute(VimState *state, int key)
   s->ctrl_w = false;                  // got CTRL-W command
   s->old_col = curwin->w_curswant;
   s->c = key;
-
-  LANGMAP_ADJUST(s->c, get_real_state() != MODE_SELECT);
 
   // If a mapping was started in Visual or Select mode, remember the length
   // of the mapping.  This is used below to not return to Insert mode for as

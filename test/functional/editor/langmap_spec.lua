@@ -99,6 +99,43 @@ describe("'langmap'", function()
     feed('qxiq')
     eq(eval('@x'), 'w')
   end)
+  -- These used to be exceptions, but with the new implementation they aren't
+  -- any more.
+  -- Because turning them back into exceptions requires modifying global state
+  -- and I think they shouldn't be exceptions anyway, I'm leaving them as they
+  -- are.
+  it(':s///c confirmation', function()
+    command('set langmap=yn,ny')
+    feed('qa')
+    feed_command('s/i/w/gc')
+    feed('yynq')
+    expect('iiw www')
+    feed('u@a')
+    expect('iiw www')
+    eq(eval('@a'), ':s/i/w/gc\rnny')
+  end)
+  it('ask yes/no after backwards range', function()
+    command('set langmap=yn,ny')
+    feed('dd')
+    insert([[
+    hello
+    there
+    these
+    are
+    some
+    lines
+    ]])
+    feed_command('4,2d')
+    feed('y')
+    expect([[
+    hello
+    there
+    these
+    are
+    some
+    lines
+    ]])
+  end)
   describe('exceptions', function()
     -- All "command characters" that 'langmap' does not apply to.
     -- These tests consist of those places where some subset of ASCII
@@ -157,28 +194,6 @@ describe("'langmap'", function()
     -- it('-- More -- prompt', function()
     --   -- The 'b' 'j' 'd' 'f' commands at the -- More -- prompt
     -- end)
-    it('ask yes/no after backwards range', function()
-      command('set langmap=yn,ny')
-      feed('dd')
-      insert([[
-      hello
-      there
-      these
-      are
-      some
-      lines
-      ]])
-      feed_command('4,2d')
-      feed('n')
-      expect([[
-      hello
-      there
-      these
-      are
-      some
-      lines
-      ]])
-    end)
     it('prompt for number', function()
       command('set langmap=12,21')
       n.source([[

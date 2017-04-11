@@ -662,7 +662,6 @@ wingotofile:
     if (xchar == NUL) {
       xchar = plain_vgetc();
     }
-    LANGMAP_ADJUST(xchar, true);
     no_mapping--;
     allow_keys--;
     add_to_showcmd(xchar);

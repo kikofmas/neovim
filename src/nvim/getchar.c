@@ -1666,11 +1666,18 @@ int vgetc(void)
       // Note: This will loop until enough bytes are received!
       int n;
       if ((n = MB_BYTE2LEN_CHECK(c)) > 1) {
-        no_mapping++;
         buf[0] = (uint8_t)c;
+        no_mapping++;
         for (int i = 1; i < n; i++) {
-          buf[i] = (uint8_t)vgetorpeek(true);
+          int next_char = (char_u)vgetorpeek(true);
+          buf[i] = (char_u)next_char;
+          bytes_recieved_buf[bytes_read++] = (char_u)next_char;
           if (buf[i] == K_SPECIAL) {
+            // TODO: check if this is needed
+            //c = vgetorpeek(true);
+            //bytes_recieved_buf[bytes_read++] = (char_u)c;
+            //next_char = vgetorpeek(true);
+            //bytes_recieved_buf[bytes_read++] = (char_u)next_char;
             // Must be a K_SPECIAL - KS_SPECIAL - KE_FILLER sequence,
             // which represents a K_SPECIAL (0x80).
             vgetorpeek(true);  // skip KS_SPECIAL
@@ -1698,6 +1705,30 @@ int vgetc(void)
           on_key_buf.size -= (size_t)old_len;
         }
         continue;
+      }
+
+      // Always adjust new characters based on State
+      int original_key = c;
+      LANGMAP_ADJUST(c,
+                    (State & (CMDLINE | INSERT)) == 0
+                    && get_real_state() != SELECTMODE);
+      if (KeyTyped && !KeyStuffed) {
+        if (c == original_key) {
+          // No 'langmap' translation, use the bytes we read from typebuf.tb_buf
+          gotchars(bytes_recieved_buf, bytes_read);
+        } else if (IS_SPECIAL(c)) {
+          // Escape the special key for insertion into typebuf.tb_buf.
+          char_u tmp[3];
+          tmp[0] = K_SPECIAL;
+          tmp[1] = (char_u)KEY2TERMCAP0(c);
+          tmp[2] = (char_u)KEY2TERMCAP1(c);
+          gotchars(tmp, 3);
+        } else {
+          char_u tmp[(MB_MAXBYTES * 3) + 1];
+          char_u *ret = add_char2buf(c, tmp);
+          assert(ret >= tmp && (uintmax_t)(ret - tmp) <= UINT_MAX);
+          gotchars(tmp, (size_t)(ret - tmp));
+        }
       }
 
       if (vgetc_char == 0) {
