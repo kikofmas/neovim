@@ -933,7 +933,6 @@ static bool normal_get_command_count(NormalState *s)
 
     no_zero_mapping++;                // don't map zero here
     s->c = plain_vgetc();
-    LANGMAP_ADJUST(s->c, true);
     no_zero_mapping--;
     if (s->ctrl_w) {
       no_mapping--;

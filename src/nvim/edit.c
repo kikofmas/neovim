@@ -2865,7 +2865,7 @@ static void ins_reg(void)
     State = NORMAL;
     regname = plain_vgetc();
     if (regname == Ctrl_R || regname == Ctrl_O || regname == Ctrl_P) {
-      /* Get a third key for literal register insertion */
+      // Get a third key for literal register insertion
       literally = regname;
       add_to_showcmd_c(literally);
       regname = plain_vgetc();

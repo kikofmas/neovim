@@ -1621,6 +1621,13 @@ int vgetc(void)
     mouse_row = old_mouse_row;
     mouse_col = old_mouse_col;
   } else {
+    size_t bytes_read;
+    // Either need 3 bytes for a K_SPECIAL character, or enough bytes to store
+    // a multibyte character that's been read.
+    // Add 4 to MB_MAXBYTES so that when reading this code it's obvious there's
+    // enough space for a K_SPECIAL character without having to check that
+    // MB_MAXBYTES is big enough.
+    char_u bytes_recieved_buf[MB_MAXBYTES + 4];
     // number of characters recorded from the last vgetc() call
     static size_t last_vgetc_recorded_len = 0;
 
@@ -1633,6 +1640,7 @@ int vgetc(void)
     last_recorded_len -= last_vgetc_recorded_len;
 
     while (true) {              // this is done twice if there are modifiers
+      bytes_read = 0;
       bool did_inc = false;
       if (mod_mask) {           // no mapping after modifier has been read
         no_mapping++;
@@ -1640,6 +1648,31 @@ int vgetc(void)
         did_inc = true;         // mod_mask may change value
       }
       c = vgetorpeek(true);
+      // n.b. the 'c' we get above can fit in 8 bits.
+      // For the moment we know this because all code paths in vgetorpeek()
+      // return a value that fits in 8 bits
+      //    typeahead_char is only ever set to ':' (from calling
+      //      typeahead_noflush() in do_more_prompt())
+      //    read_readbuffers() takes values out of a buffblock_T, which stores
+      //      char_u values.
+      //    When an interrupt is recieved, vgetorpeek() either returns Ctrl_C
+      //      or ESC.
+      //    In the "usual" case vgetorpeek() returns the next item in the
+      //      typebuf.tb_buf array -- this is a char_u array.
+      //    At the end of a mapping it returns one of Ctrl_L Crl_C and ESC
+      //    It can return NUL if called with `false` instead of `true`, but
+      //      that doesn't matter here.
+      // In the future it may be that some of these code paths are changed so
+      // that they return a value requiring >8 bytes to represent.
+      // The only place this seems worth considering is via typeahead_char. The
+      // hard-coded return values are there because they mean something
+      // specific, and anyone changing the type of the typebuf.tb_buf or
+      // buffblock_T arrays would be on the lookout for overflow errors.
+
+      // Must be greater than zero because we called vgetorpeek() with `true`.
+      assert(c < 256 && c > 0);
+
+      bytes_recieved_buf[bytes_read++] = (char_u)c;
       if (did_inc) {
         no_mapping--;
         allow_keys--;
@@ -1653,8 +1686,17 @@ int vgetc(void)
         int c2 = vgetorpeek(true);          // no mapping for these chars
         c = vgetorpeek(true);
         no_mapping--;
+        // Know that we're using bytes here, keymap.h specifies that K_SPECIAL
+        // is always followed by two bytes.
+        bytes_recieved_buf[bytes_read++] = (char_u)c2;
+        bytes_recieved_buf[bytes_read++] = (char_u)c;
         allow_keys = save_allow_keys;
         if (c2 == KS_MODIFIER) {
+          // bytes_used will be reset to 0 on the next iteration of this loop.
+          // no matter what happens in the LANGMAP_ADJUST() macro call below,
+          // the same modifier will be recorded, 'langmap' does not change the
+          // modifier.
+          gotchars(bytes_recieved_buf, bytes_read);
           mod_mask = c;
           continue;
         }
