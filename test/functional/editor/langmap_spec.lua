@@ -136,6 +136,25 @@ describe("'langmap'", function()
     lines
     ]])
   end)
+  it('prompt for number', function()
+    command('set langmap=12,21')
+    helpers.source([[
+      let gotten_one = 0
+      function Map()
+        let answer = inputlist(['a', '1.', '2.', '3.'])
+        if answer == 1
+          let g:gotten_one = 1
+        endif
+      endfunction
+      nnoremap x :call Map()<CR>
+    ]])
+    feed('x2<CR>')
+    eq(eval('gotten_one'), 1)
+    command('let g:gotten_one = 0')
+    feed_command('call Map()')
+    feed('1<CR>')
+    eq(eval('gotten_one'), 0)
+  end)
   describe('exceptions', function()
     -- All "command characters" that 'langmap' does not apply to.
     -- These tests consist of those places where some subset of ASCII
@@ -299,12 +318,7 @@ describe("'langmap'", function()
   it('treats control modified keys as characters', function()
     command('nnoremap <C-w> iw<esc>')
     command('nnoremap <C-i> ii<esc>')
-<<<<<<< HEAD:test/functional/editor/langmap_spec.lua
     testrecording('<C-w>', 'whello', local_setup, eval([["\<*C-w>"]]))
     testrecording('<C-i>', 'ihello', local_setup, eval([["\<*C-i>"]]))
-=======
-    testrecording('<C-w>', 'whello', '<C-w>', local_setup)
-    testrecording('<C-i>', 'ihello', '<C-i>', local_setup)
->>>>>>> a0c8391b89 (Add tests for macro behaviour w.r.t 'langmap'):test/functional/normal/langmap_spec.lua
   end)
 end)
