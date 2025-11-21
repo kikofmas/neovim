@@ -2658,7 +2658,6 @@ static bool nv_z_get_count(cmdarg_T *cap, int *nchar_arg)
     no_mapping++;
     allow_keys++;         // no mapping for nchar, but allow key codes
     nchar = plain_vgetc();
-    LANGMAP_ADJUST(nchar, true);
     no_mapping--;
     allow_keys--;
     add_to_showcmd(nchar);
@@ -2702,7 +2701,6 @@ static int nv_zg_zw(cmdarg_T *cap, int nchar)
     no_mapping++;
     allow_keys++;               // no mapping for nchar, but allow key codes
     nchar = plain_vgetc();
-    LANGMAP_ADJUST(nchar, true);
     no_mapping--;
     allow_keys--;
     add_to_showcmd(nchar);
@@ -5757,7 +5755,6 @@ static void nv_redo_or_register(cmdarg_T *cap)
     // Get register name
     no_mapping++;
     int reg = plain_vgetc();
-    LANGMAP_ADJUST(reg, true);
     no_mapping--;
 
     if (reg == '"') {

@@ -89,7 +89,6 @@ describe("'langmap'", function()
     feed('0a<C-O>ihi<esc>')
     expect('illllii hiwww')
   end)
-
   it('conversions are recorded in macros', function()
     feed('qiiq')
     eq(eval('@w'), 'w')
@@ -99,62 +98,7 @@ describe("'langmap'", function()
     feed('qxiq')
     eq(eval('@x'), 'w')
   end)
-  -- These used to be exceptions, but with the new implementation they aren't
-  -- any more.
-  -- Because turning them back into exceptions requires modifying global state
-  -- and I think they shouldn't be exceptions anyway, I'm leaving them as they
-  -- are.
-  it(':s///c confirmation', function()
-    command('set langmap=yn,ny')
-    feed('qa')
-    feed_command('s/i/w/gc')
-    feed('yynq')
-    expect('iiw www')
-    feed('u@a')
-    expect('iiw www')
-    eq(eval('@a'), ':s/i/w/gc\rnny')
-  end)
-  it('ask yes/no after backwards range', function()
-    command('set langmap=yn,ny')
-    feed('dd')
-    insert([[
-    hello
-    there
-    these
-    are
-    some
-    lines
-    ]])
-    feed_command('4,2d')
-    feed('y')
-    expect([[
-    hello
-    there
-    these
-    are
-    some
-    lines
-    ]])
-  end)
-  it('prompt for number', function()
-    command('set langmap=12,21')
-    helpers.source([[
-      let gotten_one = 0
-      function Map()
-        let answer = inputlist(['a', '1.', '2.', '3.'])
-        if answer == 1
-          let g:gotten_one = 1
-        endif
-      endfunction
-      nnoremap x :call Map()<CR>
-    ]])
-    feed('x2<CR>')
-    eq(eval('gotten_one'), 1)
-    command('let g:gotten_one = 0')
-    feed_command('call Map()')
-    feed('1<CR>')
-    eq(eval('gotten_one'), 0)
-  end)
+
   describe('exceptions', function()
     -- All "command characters" that 'langmap' does not apply to.
     -- These tests consist of those places where some subset of ASCII
@@ -213,6 +157,29 @@ describe("'langmap'", function()
     -- it('-- More -- prompt', function()
     --   -- The 'b' 'j' 'd' 'f' commands at the -- More -- prompt
     -- end)
+    -- These are still exceptions even with the new implementation used to be exceptions.
+    it('ask yes/no after backwards range', function()
+      command('set langmap=yn,ny')
+      feed('dd')
+      insert([[
+      hello
+      there
+      these
+      are
+      some
+      lines
+      ]])
+      feed_command('4,2d')
+      feed('n')
+      expect([[
+      hello
+      there
+      these
+      are
+      some
+      lines
+      ]])
+    end)
     it('prompt for number', function()
       command('set langmap=12,21')
       n.source([[
@@ -252,19 +219,23 @@ describe("'langmap'", function()
     iii]])
   end)
 
-  local function testrecording(command_string, expect_string, macro_string,
-                                setup_function)
-    if setup_function then setup_function() end
+  local function testrecording(command_string, expect_string, setup_function, expect_macro)
+    if setup_function then
+      setup_function()
+    end
     feed('qa' .. command_string .. 'q')
     expect(expect_string)
-    if macro_string then
-      eq(helpers.funcs.nvim_replace_termcodes(macro_string, true, true, true),
-        eval('@a'))
-    else
-      eq(helpers.funcs.nvim_replace_termcodes(command_string, true, true, true),
-        eval('@a'))
+    eq(expect_macro or n.fn.nvim_replace_termcodes(command_string, true, true, true), eval('@a'))
+    -- if expect_macro then
+    --   eq(n.fn.nvim_replace_termcodes(expect_macro, true, true, true),
+    --     eval('@a'))
+    -- else
+    --   eq(n.fn.nvim_replace_termcodes(command_string, true, true, true),
+    --     eval('@a'))
+    -- end
+    if setup_function then
+      setup_function()
     end
-    if setup_function then setup_function() end
     -- n.b. may need nvim_replace_termcodes() here.
     feed('@a')
     expect(expect_string)
@@ -279,38 +250,38 @@ describe("'langmap'", function()
   end
 
   it('does not affect recording special keys', function()
-    testrecording('A<BS><esc>', 'hell', nil, local_setup)
-    testrecording('>><lt><lt>', 'hello', nil, local_setup)
+    testrecording('A<BS><esc>', 'hell', local_setup, nil)
+    testrecording('>><lt><lt>', 'hello', local_setup, nil)
     command('nnoremap \\ x')
-    testrecording('\\', 'ello', nil, local_setup)
-    testrecording('A<C-V><BS><esc>', 'hello<BS>', nil, local_setup)
+    testrecording('\\', 'ello', local_setup)
+    testrecording('A<C-V><BS><esc>', 'hello<BS>', local_setup, nil)
   end)
   it('Translates modified keys correctly', function()
     command('nnoremap <M-i> x')
     command('nnoremap <M-w> l')
-    testrecording('<M-w>', 'ello', '<M-i>', local_setup)
-    testrecording('<M-i>x', 'hllo', '<M-w>x', local_setup)
+    testrecording('<M-w>', 'ello', local_setup, eval([["\<*M-i>"]]))
+    testrecording('<M-i>x', 'hllo', local_setup, eval([["\<*M-w>x"]]))
   end)
   it('handles multi-byte characters', function()
     command('set langmap=ïx')
-    testrecording('ï', 'ello', 'x', local_setup)
+    testrecording('ï', 'ello', local_setup, 'x')
     -- The test below checks that what's recorded is correct.
     -- It doesn't check the behaviour, as in order to cause some behaviour we
     -- need to map the multi-byte character, and there is a known bug
     -- preventing this from working (see the test below).
     command('set langmap=xï')
-    testrecording('x', 'hello', 'ï', local_setup)
+    testrecording('x', 'hello', local_setup, 'ï')
   end)
   pending('handles multibyte mappings', function()
     -- See this vim issue for the problem, may as well add a test.
     -- https://github.com/vim/vim/issues/297
     command('set langmap=ïx')
     command('nnoremap x diw')
-    testrecording('ï', '', 'x', local_setup)
+    testrecording('ï', '', local_setup, 'x')
     command('set nolangnoremap')
     command('set langmap=xï')
     command('nnoremap ï ix<esc>')
-    testrecording('x', 'xhello', 'ï', local_setup)
+    testrecording('x', 'xhello', local_setup, 'ï')
   end)
   -- This test is to ensure the behaviour doesn't change from what's already
   -- around. I (hardenedapple) personally think this behaviour should be

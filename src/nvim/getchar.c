@@ -1627,7 +1627,7 @@ int vgetc(void)
     // Add 4 to MB_MAXBYTES so that when reading this code it's obvious there's
     // enough space for a K_SPECIAL character without having to check that
     // MB_MAXBYTES is big enough.
-    char_u bytes_recieved_buf[MB_MAXBYTES + 4];
+    uint8_t bytes_recieved_buf[MB_MAXBYTES + 4];
     // number of characters recorded from the last vgetc() call
     static size_t last_vgetc_recorded_len = 0;
 
@@ -1654,11 +1654,11 @@ int vgetc(void)
       //    typeahead_char is only ever set to ':' (from calling
       //      typeahead_noflush() in do_more_prompt())
       //    read_readbuffers() takes values out of a buffblock_T, which stores
-      //      char_u values.
+      //      uint8_t values.
       //    When an interrupt is recieved, vgetorpeek() either returns Ctrl_C
       //      or ESC.
       //    In the "usual" case vgetorpeek() returns the next item in the
-      //      typebuf.tb_buf array -- this is a char_u array.
+      //      typebuf.tb_buf array -- this is a uint8_t array.
       //    At the end of a mapping it returns one of Ctrl_L Crl_C and ESC
       //    It can return NUL if called with `false` instead of `true`, but
       //      that doesn't matter here.
@@ -1672,7 +1672,7 @@ int vgetc(void)
       // Must be greater than zero because we called vgetorpeek() with `true`.
       assert(c < 256 && c > 0);
 
-      bytes_recieved_buf[bytes_read++] = (char_u)c;
+      bytes_recieved_buf[bytes_read++] = (uint8_t)c;
       if (did_inc) {
         no_mapping--;
         allow_keys--;
@@ -1688,8 +1688,8 @@ int vgetc(void)
         no_mapping--;
         // Know that we're using bytes here, keymap.h specifies that K_SPECIAL
         // is always followed by two bytes.
-        bytes_recieved_buf[bytes_read++] = (char_u)c2;
-        bytes_recieved_buf[bytes_read++] = (char_u)c;
+        bytes_recieved_buf[bytes_read++] = (uint8_t)c2;
+        bytes_recieved_buf[bytes_read++] = (uint8_t)c;
         allow_keys = save_allow_keys;
         if (c2 == KS_MODIFIER) {
           // bytes_used will be reset to 0 on the next iteration of this loop.
@@ -1711,23 +1711,44 @@ int vgetc(void)
         buf[0] = (uint8_t)c;
         no_mapping++;
         for (int i = 1; i < n; i++) {
-          int next_char = (char_u)vgetorpeek(true);
-          buf[i] = (char_u)next_char;
-          bytes_recieved_buf[bytes_read++] = (char_u)next_char;
+          int next_char = (uint8_t)vgetorpeek(true);
+          buf[i] = (uint8_t)next_char;
+          bytes_recieved_buf[bytes_read++] = (uint8_t)next_char;
           if (buf[i] == K_SPECIAL) {
-            // TODO: check if this is needed
-            //c = vgetorpeek(true);
-            //bytes_recieved_buf[bytes_read++] = (char_u)c;
-            //next_char = vgetorpeek(true);
-            //bytes_recieved_buf[bytes_read++] = (char_u)next_char;
             // Must be a K_SPECIAL - KS_SPECIAL - KE_FILLER sequence,
             // which represents a K_SPECIAL (0x80).
-            vgetorpeek(true);  // skip KS_SPECIAL
-            vgetorpeek(true);  // skip KE_FILLER
+            c = vgetorpeek(true); // KS_SPECIAL
+            bytes_recieved_buf[bytes_read++] = (uint8_t)c;
+            next_char = vgetorpeek(true); // KE_FILLER
+            bytes_recieved_buf[bytes_read++] = (uint8_t)next_char;
           }
         }
         no_mapping--;
         c = utf_ptr2char((char *)buf);
+      }
+
+      // Always adjust new characters based on State
+      int original_key = c;
+      LANGMAP_ADJUST(c,
+                    (State & (MODE_CMDLINE | MODE_INSERT)) == 0
+                    && get_real_state() != MODE_SELECT);
+      if (KeyTyped && !KeyStuffed) {
+        if (c == original_key) {
+          // No 'langmap' translation, use the bytes we read from typebuf.tb_buf
+          gotchars(bytes_recieved_buf, bytes_read);
+        } else if (IS_SPECIAL(c)) {
+          // Escape the special key for insertion into typebuf.tb_buf.
+          uint8_t tmp[3];
+          tmp[0] = K_SPECIAL;
+          tmp[1] = (uint8_t)KEY2TERMCAP0(c);
+          tmp[2] = (uint8_t)KEY2TERMCAP1(c);
+          gotchars(tmp, 3);
+        } else {
+          uint8_t tmp[(MB_MAXBYTES * 3) + 1];
+          uint8_t *ret = add_char2buf(c, tmp);
+          assert(ret >= tmp && (uintmax_t)(ret - tmp) <= UINT_MAX);
+          gotchars(tmp, (size_t)(ret - tmp));
+        }
       }
 
       // If mappings are enabled (i.e., not i_CTRL-V) and the user directly typed
@@ -1749,31 +1770,7 @@ int vgetc(void)
         continue;
       }
 
-      // Always adjust new characters based on State
-      int original_key = c;
-      LANGMAP_ADJUST(c,
-                    (State & (CMDLINE | INSERT)) == 0
-                    && get_real_state() != SELECTMODE);
-      if (KeyTyped && !KeyStuffed) {
-        if (c == original_key) {
-          // No 'langmap' translation, use the bytes we read from typebuf.tb_buf
-          gotchars(bytes_recieved_buf, bytes_read);
-        } else if (IS_SPECIAL(c)) {
-          // Escape the special key for insertion into typebuf.tb_buf.
-          char_u tmp[3];
-          tmp[0] = K_SPECIAL;
-          tmp[1] = (char_u)KEY2TERMCAP0(c);
-          tmp[2] = (char_u)KEY2TERMCAP1(c);
-          gotchars(tmp, 3);
-        } else {
-          char_u tmp[(MB_MAXBYTES * 3) + 1];
-          char_u *ret = add_char2buf(c, tmp);
-          assert(ret >= tmp && (uintmax_t)(ret - tmp) <= UINT_MAX);
-          gotchars(tmp, (size_t)(ret - tmp));
-        }
-      }
-
-      if (vgetc_char == 0) {
+     if (vgetc_char == 0) {
         vgetc_mod_mask = mod_mask;
         vgetc_char = c;
       }
@@ -2766,8 +2763,6 @@ static int vgetorpeek(bool advance)
                 KeyTyped = false;
               } else {
                 KeyTyped = true;
-                // write char to script file(s)
-                gotchars(typebuf.tb_buf + typebuf.tb_off, 1);
               }
               KeyNoremap = (unsigned char)typebuf.tb_noremap[typebuf.tb_off];
               del_typebuf(1, 0);
