@@ -1745,7 +1745,7 @@ int vgetc(void)
           gotchars(tmp, 3);
         } else {
           uint8_t tmp[(MB_MAXBYTES * 3) + 1];
-          uint8_t *ret = add_char2buf(c, tmp);
+          uint8_t *ret = (uint8_t *)add_char2buf(c, (char *)tmp);
           assert(ret >= tmp && (uintmax_t)(ret - tmp) <= UINT_MAX);
           gotchars(tmp, (size_t)(ret - tmp));
         }
@@ -2458,7 +2458,7 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
     // Write chars to script file(s).
     // Note: :lmap mappings are written *after* being applied. #5658
     if (keylen > typebuf.tb_maplen && (mp->m_mode & MODE_LANGMAP) == 0) {
-      gotchars(mp->m_keys + typebuf.tb_maplen,
+      gotchars((uint8_t *)(mp->m_keys + typebuf.tb_maplen),
                (size_t)(keylen - typebuf.tb_maplen));
     }
 
@@ -2734,7 +2734,6 @@ static int vgetorpeek(bool advance)
             // Also record this character, it might be needed to
             // get out of Insert mode.
             *typebuf.tb_buf = (uint8_t)c;
-            gotchars(typebuf.tb_buf, 1);
           }
           cmd_silent = false;
 
